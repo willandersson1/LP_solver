@@ -18,6 +18,8 @@ void solveGeneralLP() {
     // Operators only >=, <=, =
     // Must have + between terms in goal
     // Only integers
+    // Shouldn't have different variables in same line (ie 2x + x < y)
+    // TODO: unless I parse to allow this
 
     // Get input
     printf("What function would you like to maximise?\n");
