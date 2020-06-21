@@ -9,11 +9,12 @@
 void solveGeneralLP() {
     // Explain the required input structure...
 
-    // Taken from https://en.wikipedia.org/wiki/Linear_programming
+    // Based off of https://en.wikipedia.org/wiki/Linear_programming
     // One LINEAR maximisation goal
     // Unlimited LINEAR constraints
     // Constraints can't have variables not in the maximisation goal
-    // Variables >= 0
+    // No 0 coefficients
+    // No unrestricted variables
 
     // Operators only >=, <=, =
     // Must have + between terms in goal
