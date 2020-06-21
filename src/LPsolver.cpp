@@ -1,18 +1,15 @@
-#include <string> 
-
 #include "LPsolver.hpp"
+// TODO: should includes from header also go here?
 
 // Implementation of the simplex algorithm: 
 // https://en.wikipedia.org/wiki/Simplex_algorithm
 
-// TODO: maybe need to create own matrix class.
-
 // Initialise
-LPsolver::LPsolver(std::string * goal_in,
-                   std::vector<std::string> * constraints_in) {
+LPsolver::LPsolver(std::string goal_in,
+                   std::vector<std::string> constraints_in) {
 
-    inputGoal = *goal_in;
-    inputConstraints = *constraints_in;
+    inputGoal = goal_in;
+    inputConstraints = constraints_in;
 
     parse();
     standardise();
@@ -79,7 +76,6 @@ void LPsolver::parseInputGoal() {
             auto term = std::make_pair(coeff, var);
             parsedGoal.push_back(term);
 
-            variables.insert(var);
             // TODO: maybe need to increment i after this
         }
     }
@@ -192,8 +188,6 @@ void LPsolver::parseInputConstraints() {
                     LHS.push_back(term);
                 }
 
-                variables.insert(var);
-
                 
                 // TODO: maybe need to increment i after this
             }
@@ -203,13 +197,6 @@ void LPsolver::parseInputConstraints() {
         auto parsed = std::make_tuple(LHS, comparator, RHS);
         parsedConstraints.push_back(parsed);
     }
-
-
-
-
-    // Might have to manipulate to add variables to the RHS
-    // Check that no new variables are introduced here
-
 }
 
 void LPsolver::standardise() {
@@ -227,7 +214,11 @@ void LPsolver::standardise() {
     // Remove unconstrained variables. These can be trivially solved by 
     // the solver (set them to any number that satisfies its constraints).
     // Do this by replacing such constraints with two two equality constraints.
+    // TODO: unimplemented. Just enforced by input instructions 
     step3();
+
+    // The final step is to make the RHSs all positive
+    makeAllRHSPositive();
 }
 
 void LPsolver::step1() {
@@ -282,8 +273,9 @@ void LPsolver::step1() {
     // Now substitute with the newly minted variables
     // Iterate over all constraints without single variables
     for (int i = 0; i < standardisedConstraints.size(); i++) {
+        // TODO: test if need pointers here actually. [] and get should give references
         auto currTuple = standardisedConstraints[i]; 
-        auto currLHS = std::get<0>(currTuple); // TODO: check these pointers work
+        auto currLHS = std::get<0>(currTuple); 
         double* currRHS = &std::get<2>(currTuple);
 
         // Check all pairs in the LHS to see if any need substitution
@@ -320,8 +312,90 @@ void LPsolver::step2() {
     // x + s = 0. It "tightens the slack" to "bring up" x to 0.
     // The same but with bringing it down for >= (ie y >= 0 ~> y - s' = 0)
 
-    
-    // iterate...
-        // check not = operator...
-        // check what operator -> should add or remove slack var (must be unique!)
+    int nextSlackVar = 0;
+    for (int i = 0; i < standardisedConstraints.size(); i++) {
+        // TODO: check if need pointers here. [], get apparently give references
+        auto currTuple = standardisedConstraints[i];
+        auto currLHS = std::get<0>(currTuple);
+        auto currComparator = std::get<1>(currTuple);
+
+        // Update all non-equality constraints
+        if (currComparator != "=") {
+            int coeff = 1;
+
+            if (currComparator == ">=") {
+                coeff = -1;
+            }
+
+            std::string slackName = "s_";
+            slackName.append(std::to_string(nextSlackVar));
+            nextSlackVar++;
+
+            // Update LHS, change comparator to =
+            auto slackVar = std::make_pair(coeff, slackName);
+            currLHS.push_back(slackVar);
+
+            currComparator = "=";
+        }
+    }
+}
+
+void LPsolver::step3() {
+    // Final step is to remove unrestricted variables. These are ones
+    // that have no constraint limiting them to a domain
+    // if x is unrestricted, then introduce the expression x_+ - x_- 
+    // with x_+, x_- >= 0. Substituting x by this expression is equivalent
+    // to x being unrestricted.
+    // Since we implicitly assume all variables remaining after standardising 
+    // are >= 0, we don't need to add another constraint and x can be elimintated
+    // from the program.
+}
+
+void LPsolver::makeAllRHSPositive() {
+    // TODO
+}
+
+void LPsolver::createSimplexTableau() {
+    // Because the program has been standardised, we know that we can
+    // create a simplex tableau in canonical form. 
+    // See https://en.wikipedia.org/wiki/Simplex_algorithm#Simplex_tableau
+    // The linear algebra library Eigen is used
+
+    // Begin by assigning an order to all variables
+    // This is done behind the scenes by sets
+    std::set<std::string> variables;
+    for (int i = 0; i < parsedGoal.size(); i++) {
+        std::string currVar = parsedGoal[i].second;
+        variables.insert(currVar);
+    }
+
+    // c encodes the goal
+    int c_sz = variables.size();
+    c.resize(c_sz);
+
+    for (int i = 0; i < standardisedConstraints.size(); i++) {
+        auto currTuple = standardisedConstraints[i];
+        auto currLHS = std::get<0>(currTuple);
+
+        for (int j = 0; j < currLHS.size(); j++) {
+            std::string currVar = currLHS[j].second;
+            variables.insert(currVar);
+        }
+    }
+
+    int n_vars = variables.size();
+
+
+    // TODO
+    // Create c...
+
+    // Create A and b...
+
+
+    // Create the appropiate 0 vector(s)
+
+    // Make the whole tableau
+
+
+
 }
