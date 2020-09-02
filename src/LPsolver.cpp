@@ -24,7 +24,7 @@ void LPsolver::parse() {
 
 void LPsolver::parseInputGoal() {
     // Parse the input goal. For example, for the input "1x + -3y",
-    // it would parse to {(1, "x"), (-3, "y")}
+    // it would parse to {(1, "x"), (-3, "y")}.
     int i = 0;
     while (i < inputGoal.length()) {
         char curr = inputGoal[i];
@@ -83,9 +83,8 @@ void LPsolver::parseInputGoal() {
 
 void LPsolver::parseInputConstraints() {
     // Return tuple of list of terms in LHS, comparator, RHS
-    // For example, if 5x - -11y <= z is input, then
-    // the following tuple is returned: ({(5, "x"), (-11, "y"), (-1, "z")}, "<=", "0")
-    
+    // For example, if 5x + -11y <= z is input, then
+    // the following tuple is returned: ({(5, "x"), (-11, "y"), (-1, "z")}, "<=", "0").
 
     bool begunRHS = false;
     for (int i = 0; i < inputConstraints.size(); i++) {
@@ -306,13 +305,13 @@ void LPsolver::step1() {
 void LPsolver::step2() {
     // Now we want to get rid of all inequality constraints and replace them 
     // with equality constraints. This allows for simpler solving.
-    // Introduce "slack variables" that are >= 0 (again, implicitly)
+    // Introduce "slack variables" that are >= 0 (again, implicitly).
     // Example: x + 2y <= 2 becomes x + 2y + s = 2, with s >= 0 a slack variable.
-    // The intuition if that x <= 0 iff there's *some* s >= 0 s.t
+    // The intuition is that x <= 0 iff there's *some* s >= 0 s.t
     // x + s = 0. It "tightens the slack" to "bring up" x to 0.
     // The same but with bringing it down for >= (ie y >= 0 ~> y - s' = 0)
 
-    int nextSlackVar = 0;
+    int nextSlackVarIndex = 0;
     for (int i = 0; i < standardisedConstraints.size(); i++) {
         // TODO: check if need pointers here. [], get apparently give references
         auto currTuple = standardisedConstraints[i];
@@ -328,10 +327,10 @@ void LPsolver::step2() {
             }
 
             std::string slackName = "s_";
-            slackName.append(std::to_string(nextSlackVar));
-            nextSlackVar++;
+            slackName.append(std::to_string(nextSlackVarIndex));
+            nextSlackVarIndex++;
 
-            // Update LHS, change comparator to =
+            // Update LHS, change comparator to = since we've added slack
             auto slackVar = std::make_pair(coeff, slackName);
             currLHS.push_back(slackVar);
 
@@ -359,42 +358,52 @@ void LPsolver::createSimplexTableau() {
     // Because the program has been standardised, we know that we can
     // create a simplex tableau in canonical form. 
     // See https://en.wikipedia.org/wiki/Simplex_algorithm#Simplex_tableau
-    // The linear algebra library Eigen is used
+    // The linear algebra library Eigen is used.
 
-    // Begin by assigning an order to all variables
-    // This is done behind the scenes by sets
+    // Collect all variables except the artificial "NUM" ones.
+    // This also gives us an order to the variables, due to the set class.
     std::set<std::string> variables;
+
+    // Take the ones from the goal first. By assumption these have no "NUM" vars.
     for (int i = 0; i < parsedGoal.size(); i++) {
         std::string currVar = parsedGoal[i].second;
         variables.insert(currVar);
     }
 
-    // c encodes the goal
-    int c_sz = variables.size();
-    c.resize(c_sz);
-
+    // Take the rest from the constraints.
     for (int i = 0; i < standardisedConstraints.size(); i++) {
         auto currTuple = standardisedConstraints[i];
         auto currLHS = std::get<0>(currTuple);
 
         for (int j = 0; j < currLHS.size(); j++) {
             std::string currVar = currLHS[j].second;
-            variables.insert(currVar);
+
+            if (currVar != "NUM") {
+                variables.insert(currVar);
+            }
         }
     }
 
-    int n_vars = variables.size();
-
-
-    // TODO
-    // Create c...
+    // Create c:
+    // If we want to minimise 3x + 2y + -5z, c is [3 2 -5] transposed.
+    // If we introduced slack variables, then they need to be appended
+    // as zeroes to c. So if we have s_1 and s_2, c becomes [3 2 -5 0 0] transposed.
+    // In the end, since we assume inputted constraints don't introduce variables not in 
+    // the inputted goal, we can just set the size of c to the number of variables.
+    c.resize(variables.size());
+    c.setZero();
+    
+    // Put the goal variables in first, the rest (slack vars) are zero.
+    for (int i = 0; i < parsedGoal.size(); i++) {
+        c(i) = parsedGoal[i].first;
+    }
 
     // Create A and b...
 
 
-    // Create the appropiate 0 vector(s)
+    // Create the appropiate 0 vector(s)...
 
-    // Make the whole tableau
+    // Make the whole tableau...
 
 
 
