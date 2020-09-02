@@ -10,16 +10,17 @@ void solveGeneralLP() {
     // Explain the required input structure...
 
     // Based off of https://en.wikipedia.org/wiki/Linear_programming
-    // One LINEAR maximisation goal
+    // One LINEAR maximisation goal, with no constants.
     // Unlimited LINEAR constraints
     // Constraints can't have variables not in the maximisation goal
     // No 0 coefficients
     // No unrestricted variables
 
-    // Operators only >=, <=, =
-    // Must have + between terms in goal
+    // Comparators only >=, <=, =
+    // Must have + between terms everywhere. Turn x - y <= 0 into x + -y <= 0.
     // Only integers
-    // Shouldn't have different variables in same line (ie 2x + x < y)
+    // Shouldn't have uncollected variables like 2x + x <= 10. 
+    // This includes constants.
     // TODO: unless I parse to allow this
 
     // Get input
