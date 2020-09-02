@@ -10,9 +10,9 @@ void solveGeneralLP() {
     // Explain the required input structure...
 
     // Based off of https://en.wikipedia.org/wiki/Linear_programming
-    // One LINEAR maximisation goal, with no constants.
+    // One LINEAR MINIMISATION goal, with no constants.
     // Unlimited LINEAR constraints
-    // Constraints can't have variables not in the maximisation goal
+    // Constraints can't have variables not in the goal
     // No 0 coefficients
     // No unrestricted variables
 
