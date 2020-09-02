@@ -361,13 +361,13 @@ void LPsolver::createSimplexTableau() {
     // The linear algebra library Eigen is used.
 
     // Collect all variables except the artificial "NUM" ones.
-    // This also gives us an order to the variables, due to the set class.
-    std::set<std::string> variables;
+    // This also gives us an order to the variables, so we can refer to them.
+    std::vector<std::string> variables;
 
     // Take the ones from the goal first. By assumption these have no "NUM" vars.
     for (int i = 0; i < parsedGoal.size(); i++) {
         std::string currVar = parsedGoal[i].second;
-        variables.insert(currVar);
+        variables.push_back(currVar);
     }
 
     // Take the rest from the constraints.
@@ -378,12 +378,15 @@ void LPsolver::createSimplexTableau() {
         for (int j = 0; j < currLHS.size(); j++) {
             std::string currVar = currLHS[j].second;
 
-            if (currVar != "NUM") {
-                variables.insert(currVar);
+            // Avoid "NUM" and duplicates.
+            if (currVar != "NUM" && 
+                std::count(variables.begin(), variables.end(), currVar) == 0) {
+                variables.push_back(currVar);
             }
         }
     }
 
+    // Create the simplex tableau.
     // Create c:
     // If we want to minimise 3x + 2y + -5z, c is [3 2 -5] transposed.
     // If we introduced slack variables, then they need to be appended
@@ -398,13 +401,47 @@ void LPsolver::createSimplexTableau() {
         c(i) = parsedGoal[i].first;
     }
 
-    // Create A and b...
+    // First row: [1 -c^T 0]
+    Eigen::VectorXd row0;
+    row0 << 1, -1*(c.transpose()), 0;
 
 
-    // Create the appropiate 0 vector(s)...
+    // Rest of the rows: one per constraint. 
+    // Have the form [0, LHS, RHS] where RHS is a constant and LHS
+    // is the coefficients of the relevant variables. 
+    // Here we need to use the ordering of variables in the set to keep track.
+    int rows = 1 + standardisedConstraints.size();
+    int cols = row0.size();
+    simplexTableau.resize(rows, cols);
 
-    // Make the whole tableau...
+    simplexTableau.row(0) = row0;
 
+    // Iterate over all the constraints and put them into the matrix.
+    for (int i = 0; i < standardisedConstraints.size(); i++) {
+        Eigen::VectorXd currConstraintCoeffs(variables.size());
 
+        auto currTuple = standardisedConstraints[i];
+        double currRHS = std::get<2>(currTuple);
+        auto currLHS = std::get<0>(currTuple);
 
+        // Go through the LHS of this constraint to get the coefficients.
+        for (int j = 0; j < currLHS.size(); j++) {
+            double coeff = std::get<0>(currLHS[j]);
+            std::string var = std::get<1>(currLHS[j]);
+            int varRepresentative;
+
+            // Get the column index that represents this var.
+            // Add one because the 0th column is a 0.
+            for (int k = 0; k < variables.size(); k++) {
+                if (variables[i] == var) {
+                    varRepresentative = k + 1;
+                    break;
+                }
+            }
+
+            currConstraintCoeffs(varRepresentative) = coeff;
+        }
+
+        simplexTableau.row(i + 1) << 0, currConstraintCoeffs, currRHS;
+    }
 }

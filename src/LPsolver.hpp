@@ -27,6 +27,7 @@ class LPsolver {
             <
             std::vector<std::pair<double, std::string>>, // LHS
             std::string, // comparator
+            // TODO don't actually need comparator since it is all standardised to =
             double // RHS. Need doubles as might need to divide in step 1.
             >
     > standardisedConstraints;
@@ -34,9 +35,9 @@ class LPsolver {
     std::set<std::string> variables;
 
     Eigen::MatrixXd A;
-    Eigen::VectorXd c;
     Eigen::VectorXd b;
-    Eigen::MatrixXd simplexTableau;
+    Eigen::VectorXd c;
+    Eigen::MatrixXd simplexTableau; // TODO do I really need A, b, c? 
 
     void parse();
     void standardise();
