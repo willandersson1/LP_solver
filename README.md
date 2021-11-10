@@ -12,7 +12,7 @@ A linear program solver will then find the values for x and y such that the goal
 
 
 ### Motivation
-Linear programs weren't mentioned in any of my algorithms classes; I learned of them from a finance textbook. I looked the topic up on Wikipedia and was astounded to see how much research goes into these algorithms. I didn't think for a second that business problems, given by only a few formulas, could be so difficult to solve in general. If asked for a complicated algorithm, a fellow computer science student would never mention linear programs. My interest was solidified after they were mentioned in a game theory and computer networks class. After all this I decided it would be a good challenge to try and implement one myself, also partly because I could practise parsing user input.
+At the time of this project's inception, linear programs hadn't been mentioned in any of my algorithms classes; I learned of them from a finance textbook. I looked the topic up on Wikipedia and was astounded to see how much research goes into these algorithms. I didn't think for a second that business problems, given by only a few formulas, could be so difficult to solve in general. If asked for a complicated algorithm, a fellow computer science student would never mention linear programs. My interest was solidified after they were mentioned in a game theory and computer networks class. After all this I decided it would be a good challenge to try and implement one myself, also partly because I could practise parsing user input.
 
 
 ### Explanation of simplex algorithm
