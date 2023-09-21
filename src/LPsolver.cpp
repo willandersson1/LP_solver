@@ -1,5 +1,5 @@
-#include "LPsolver.hpp"
-// TODO: should includes from header also go here?
+#include "headers/LPsolver.h"
+#include <vector>
 
 // Implementation of the simplex algorithm: 
 // https://en.wikipedia.org/wiki/Simplex_algorithm
@@ -7,13 +7,18 @@
 // Initialise
 LPsolver::LPsolver(std::string goal_in,
                    std::vector<std::string> constraints_in) {
-
     inputGoal = goal_in;
     inputConstraints = constraints_in;
 
     parse();
     standardise();
     createSimplexTableau();
+}
+
+std::vector<std::string> LPsolver::solve() {
+    printf("Solver");
+    std::vector<std::string> v = {"solver"};
+    return v;
 }
 
 void LPsolver::parse() {

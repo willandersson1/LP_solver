@@ -54,4 +54,4 @@ class LPsolver {
         LPsolver (std::string, std::vector<std::string>);
 
         std::vector<std::string> solve();
-} LPsolver;
+};

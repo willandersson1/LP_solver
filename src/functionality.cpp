@@ -2,8 +2,8 @@
 #include <vector>
 #include <string>
 
-#include "functionality.hpp"
-#include "LPsolver.hpp"
+#include "headers/functionality.h"
+#include "headers/LPsolver.h"
 
 // Solve a general linear program.
 void solveGeneralLP() {
