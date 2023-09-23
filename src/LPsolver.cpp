@@ -1,4 +1,5 @@
 #include "headers/LPsolver.h"
+#include <iostream>
 #include <vector>
 
 // Implementation of the simplex algorithm: 
@@ -23,7 +24,6 @@ std::vector<std::string> LPsolver::solve() {
 
 void LPsolver::parse() {
     parseInputGoal();
-
     parseInputConstraints();
 }
 
@@ -37,70 +37,45 @@ void LPsolver::parseInputGoal() {
         // Skip things that aren't terms
         if (curr == ' ' || curr == '+') {
             i++;
+            continue;
         }
         
-        // TODO: make sure that this elif works, maybe need a continue in the if branch
-        // Now we know a term is appearing next
-        else if (curr != '+') {
-            int coeff;
-            std::string::size_type coeffLength;
-            // Get the coefficient as an int
-            // If this fails, then the coefficient is just a negative sign, 
-            // or 1 (no coefficient)
-            try {
-                coeff = std::stoi(inputGoal.substr(i), &coeffLength);
-            } catch (std::invalid_argument) { // TODO: this worked when testing in main
-                coeffLength = 1;
+        // TODO: factor this part, I use the same code for constraints
+        std::string::size_type coeffLength; // stoi will write the length of the number here
+        int coeff = std::stoi(inputGoal.substr(i), &coeffLength, 10); // grabs the first integer in the remaining part of the string
+        
+        // Begin reading the variable to which the coefficient is attached
+        // First skip over the number
+        i += coeffLength;
+        std::string var;
 
-                if (i + 1 < inputGoal.length() && inputGoal[i + 1] == '-') {
-                    coeff = -1;
-                }
-
-                else {
-                    coeff = 1;
-                }
-            }
-            
-            // Begin reading the variable to which the coefficient is attached
-            // First skip over the number
-            i += coeffLength;
-            std::string var;
-
+        while (i < inputGoal.length()) {
             curr = inputGoal[i];
-            while (i < inputGoal.length() && inputGoal[i] != ' ') {
-                var.push_back(curr);
-                i++;
+
+            if (curr == ' ') {
+                break;
             }
 
-            // If no var name was read, then the coefficient is just a number
-            if (var.length() == 0) {
-                var = "NUM";
-            }
-
-            // Finally save the parsed info
-            auto term = std::make_pair(coeff, var);
-            parsedGoal.push_back(term);
-
-            // TODO: maybe need to increment i after this
+            var.push_back(curr);
+            i++;
         }
+
+        // Finally save the parsed info
+        auto term = std::make_pair(coeff, var);
+        parsedGoal.push_back(term);
     }
 }
 
 void LPsolver::parseInputConstraints() {
-    // Return tuple of list of terms in LHS, comparator, RHS
-    // For example, if 5x + -11y <= z is input, then
-    // the following tuple is returned: ({(5, "x"), (-11, "y"), (-1, "z")}, "<=", "0").
-
-    bool begunRHS = false;
-    for (int i = 0; i < inputConstraints.size(); i++) {
-        std::string currConstraint = inputConstraints[i];
-
+    // Return tuple of list of terms in LHS, RHS.
+    // For example, if 5x + -11y + 1z <= 5 is input, then
+    // the following tuple is returned: ({(5, "x"), (-11, "y"), (1, "z")}, "5").
+    for (std::string currConstraint : inputConstraints) {
+        std::cout << "curr cstr " << currConstraint << std::endl;
         std::vector<std::pair<int, std::string>> LHS;
-        std::string comparator;
         int RHS = 0;
 
         int j = 0;
-        bool nextTermNegative = false;
         while (j < currConstraint.length()) {
             char curr = currConstraint[j];
 
@@ -109,96 +84,47 @@ void LPsolver::parseInputConstraints() {
                 j++;
             }
 
-            // Check if next term should be negative
-            else if (curr == '-'){
-                nextTermNegative = true;
-                j++;
-            }
-
             // Check if we're at a comparator
-            else if (curr == '=') {
-                comparator = "=";
-                begunRHS = true;
-                j++;
-            }
-
             else if (curr == '<') {
-                comparator = "<";
-                begunRHS = true;
-                j++;
+                assert(currConstraint[j + 1] == '=');
+                j += 2;
+
+                RHS = std::stoi(currConstraint.substr(j), nullptr, 10); // grabs the first integer in the remaining part of the string
+                break;
             }
 
-            else if (curr == '>') {
-                comparator = ">";
-                begunRHS = true;
-                j++;
-            }
-
-            // Now we are at a term
+            // Now we are at a term, in the LHS
             else {
                 // As for parsing the goal, read the coefficient and variable
-                int coeff;
-                std::string::size_type coeffLength;
-
-                try {
-                    coeff = std::stoi(currConstraint.substr(j), &coeffLength);
-                } catch (std::invalid_argument) { // TODO: this worked when testing in main
-                    coeffLength = 1;
-
-                    if (j + 1 < currConstraint.length() && currConstraint[j + 1] == '-') {
-                        coeff = -1;
-                    }
-
-                    else {
-                        coeff = 1;
-                    }
-                }
-
-                if (nextTermNegative) {
-                    coeff = -1 * coeff;
-                    nextTermNegative = false;
-                }
-
-                // Parse the variable name
+                // TODO: factor this
+                std::string::size_type coeffLength; // stoi will write the length of the number here
+                int coeff = std::stoi(currConstraint.substr(j), &coeffLength, 10); // grabs the first integer in the remaining part of the string
+                
+                // Begin reading the variable to which the coefficient is attached
+                // First skip over the number
                 j += coeffLength;
                 std::string var;
 
-                curr = currConstraint[j];
-                while (j < currConstraint.length() && currConstraint[j] != ' ') {
+                while (j < currConstraint.length()) {
+                    curr = currConstraint[j];
+
+                    if (curr == ' ') {
+                        break;
+                    }
+
                     var.push_back(curr);
                     j++;
                 }
 
-                if (var.length() == 0) {
-                    var = "NUM";
-                }
-
                 // Finally save the parsed info
                 auto term = std::make_pair(coeff, var);
-
-                if (begunRHS) {
-                    // Move the term to the LHS unless it's a NUM
-                    if (term.second == "NUM") {
-                        RHS += term.first;
-                    }
-
-                    else {
-                        term.first = -1 * coeff;
-                        LHS.push_back(term);
-                    }
-                }
-
-                else {
-                    LHS.push_back(term);
-                }
-
-                
-                // TODO: maybe need to increment i after this
+                std::cout << "term: " << coeff << ", " << var << std::endl;
+                LHS.push_back(term);
             }
-            
         }
 
-        auto parsed = std::make_tuple(LHS, comparator, RHS);
+        auto parsed = std::make_tuple(LHS, RHS);
+        std::cout << RHS << std::endl;
         parsedConstraints.push_back(parsed);
     }
 }
@@ -237,8 +163,8 @@ void LPsolver::step1() {
     for (int i = 0; i < parsedConstraints.size(); i++) {
         auto currTuple = parsedConstraints[i]; 
         auto currLHS = std::get<0>(currTuple);
-        auto currComparator = std::get<1>(currTuple);
-        auto currRHS = std::get<2>(currTuple);
+        auto currComparator = "<=";
+        auto currRHS = std::get<1>(currTuple);
 
         // Check if it involves only one variable, since
         // after parsing, all non-NUM variables are in the LHS

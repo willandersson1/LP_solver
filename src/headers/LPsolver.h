@@ -16,7 +16,6 @@ class LPsolver {
         std::tuple
             <
             std::vector<std::pair<int, std::string>>, // LHS
-            std::string, // comparator
             int // RHS
             >
     > parsedConstraints;

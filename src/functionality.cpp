@@ -1,9 +1,51 @@
+#include <assert.h>
 #include <iostream>
 #include <vector>
 #include <string>
 
 #include "headers/functionality.h"
 #include "headers/LPsolver.h"
+
+using namespace std;
+
+string get_goal() {
+    cout << "Input the minimisation goal." << endl;
+    cout << "There should be no constants, it must be linear, variables must be a single alphabetical character" << endl;
+    cout << "Coefficients must be non-zero integers; terms separated by \" + \"." << endl;
+    cout << "There can be no uncollected variables like \"2x + x\"" << endl;
+    cout << "An example: 4x + -5y + 1z." << endl;
+
+    string input_str;
+    cin.ignore();
+    getline(cin, input_str);
+
+    return input_str;
+}
+
+vector<string> get_constraints() {
+    cout << "How many constraints do you have?" << endl;
+    int num_constraints;
+    cin >> num_constraints;
+
+    cout << "Enter the " << num_constraints << " constraints." << endl;
+    cout << "Follow the rules for the minimisation goal, additionally..." << endl;
+    cout << "Comparators only <=; only constants in the RHS; no constants in the LHS." << endl;
+    cout << "An example: 9x + -8y <= 100" << endl;
+
+    vector<string> constraints; 
+    for (int i = 0; i < num_constraints; i++) {
+        string constraint; 
+        cin.ignore();
+        getline(cin, constraint);
+
+        assert(constraint.find(" <= ") != string::npos);
+        assert(constraint.find(">") == string::npos);
+
+        constraints.push_back(constraint);
+    }
+
+    return constraints;
+}
 
 // Solve a general linear program.
 void solveGeneralLP() {
@@ -16,27 +58,20 @@ void solveGeneralLP() {
     // No 0 coefficients
     // No unrestricted variables
 
-    // Comparators only >=, <=, =
+    // Comparators only <=
     // Must have + between terms everywhere. Turn x - y <= 0 into x + -y <= 0.
     // Only integers
     // Shouldn't have uncollected variables like 2x + x <= 10. 
     // This includes constants.
-    // TODO: unless I parse to allow this
 
-    // Get input
-    printf("What function would you like to maximise?\n");
+    string goal_str = get_goal();
+    vector<string> constraints = get_constraints();
 
-
-
-    // Check the input is valid... 
-
-
-    // Do the computation...
-
+    LPsolver solver = LPsolver(goal_str, constraints);
+    // vector<string> result = solver.solve();
 
     // Print result
-
-
+    // TODO
 }
 
 
