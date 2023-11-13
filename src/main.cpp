@@ -7,7 +7,8 @@ int main() {
     printf("1 - run benchmarks for randomised inputs\n");
 
     int choice;
-    std::cin >> choice;
+    choice = 0;
+    // std::cin >> choice;
 
     switch (choice) {
         case 0: solveGeneralLP(); break;

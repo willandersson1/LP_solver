@@ -17,7 +17,64 @@ LPsolver::LPsolver(std::string goal_in,
 }
 
 std::vector<std::string> LPsolver::solve() {
-    printf("Solver");
+    const int rows = simplexTableau.rows();
+    const int cols = simplexTableau.cols();
+
+    while (simplexTableau.row(rows - 1).minCoeff() < 0) {
+        // Get pivot col
+        int pivotCol = 0;
+        double pivotColVal = simplexTableau(rows - 1, 0);
+        for (int c = 1; c < cols - 2; c++) { // subtract 2 because we skip the P value and the b column
+            double elem = simplexTableau(rows - 1, c);
+            if (elem < pivotCol) {
+                pivotCol = c;
+                pivotColVal = elem;
+            }
+        }
+
+        // Get pivot row
+        Eigen::VectorXd quotients(rows - 1);
+        quotients.setZero();
+        std::vector<int> positivePivotColIdxs;
+        for (int r = 0; r < rows - 1; r++) {
+            if (simplexTableau(r, pivotCol) > 0) {
+                positivePivotColIdxs.push_back(r);
+            }
+        }
+
+        int pivotRow = -1;
+        double smallestQuotient;
+        for (int r : positivePivotColIdxs) {
+            double quotient = simplexTableau(r, cols - 1) / simplexTableau(r, cols - 1);
+            if (pivotRow == -1 || quotient < smallestQuotient) {
+                pivotRow = r;
+                smallestQuotient = quotient;
+            }
+        }
+
+        double pivotElem = simplexTableau(pivotRow, pivotCol);
+        assert(pivotRow < rows - 1);
+        assert(pivotElem > 0);
+
+        // Pivot
+        // Make pivot = 1
+        simplexTableau.row(pivotRow) /= pivotElem;
+        std::cout << "after dividing by pivot elem\n" << simplexTableau << std::endl;
+
+        // Make all other entries in pivot col = 0
+        for (int r = 0; r < rows; r++) {
+            if (r == pivotRow) {
+                continue;
+            }
+            
+            double elem = simplexTableau(r, pivotCol);
+            simplexTableau.row(r) -= elem * simplexTableau.row(pivotRow);
+        }
+        std::cout << "after pivoting\n" << simplexTableau << std::endl;
+    }
+
+    std::cout << "final\n" << simplexTableau << std::endl;
+    
     std::vector<std::string> v = {"solver"};
     return v;
 }
@@ -124,7 +181,6 @@ void LPsolver::parseInputConstraints() {
         }
 
         auto parsed = std::make_tuple(LHS, RHS);
-        std::cout << RHS << std::endl;
         parsedConstraints.push_back(parsed);
     }
 }
@@ -143,7 +199,7 @@ void LPsolver::standardise() {
 
     // Remove unconstrained variables. These can be trivially solved by 
     // the solver (set them to any number that satisfies its constraints).
-    // Do this by replacing such constraints with two two equality constraints.
+    // Do this by replacing such constraints with two two-equality constraints.
     // TODO: unimplemented. Just enforced by input instructions 
     step3();
 
@@ -163,12 +219,13 @@ void LPsolver::step1() {
     for (int i = 0; i < parsedConstraints.size(); i++) {
         auto currTuple = parsedConstraints[i]; 
         auto currLHS = std::get<0>(currTuple);
-        auto currComparator = "<=";
+        auto currComparator = "<="; // TODO: make string
         auto currRHS = std::get<1>(currTuple);
 
         // Check if it involves only one variable, since
         // after parsing, all non-NUM variables are in the LHS
         // Also make sure it's a lower bound
+        // TODO: what is this for
         if (currLHS.size() == 1 && currComparator == ">=") {
             double oldCoeff = currLHS[0].first;
             std::string oldVar = currLHS[0].second;
@@ -244,7 +301,7 @@ void LPsolver::step2() {
 
     int nextSlackVarIndex = 0;
     for (int i = 0; i < standardisedConstraints.size(); i++) {
-        // TODO: check if need pointers here. [], get apparently give references
+        // TODO: check why the pointers are so weird here
         auto currTuple = standardisedConstraints[i];
         auto currLHS = std::get<0>(currTuple);
         auto currComparator = std::get<1>(currTuple);
@@ -258,14 +315,14 @@ void LPsolver::step2() {
             }
 
             std::string slackName = "s_";
-            slackName.append(std::to_string(nextSlackVarIndex));
+            slackName.append(std::to_string(nextSlackVarIndex)); // TODO could just concat at initialisation...
             nextSlackVarIndex++;
 
             // Update LHS, change comparator to = since we've added slack
             auto slackVar = std::make_pair(coeff, slackName);
-            currLHS.push_back(slackVar);
+            std::get<0>(standardisedConstraints[i]).push_back(slackVar);
 
-            currComparator = "=";
+            std::get<1>(standardisedConstraints[i]) = "=";
         }
     }
 }
@@ -318,38 +375,18 @@ void LPsolver::createSimplexTableau() {
     }
 
     // Create the simplex tableau.
-    // Create c:
-    // If we want to minimise 3x + 2y + -5z, c is [3 2 -5] transposed.
-    // If we introduced slack variables, then they need to be appended
-    // as zeroes to c. So if we have s_1 and s_2, c becomes [3 2 -5 0 0] transposed.
-    // In the end, since we assume inputted constraints don't introduce variables not in 
-    // the inputted goal, we can just set the size of c to the number of variables.
-    c.resize(variables.size());
-    c.setZero();
-    
-    // Put the goal variables in first, the rest (slack vars) are zero.
-    for (int i = 0; i < parsedGoal.size(); i++) {
-        c(i) = parsedGoal[i].first;
-    }
 
-    // First row: [1 -c^T 0]
-    Eigen::VectorXd row0;
-    row0 << 1, -1*(c.transpose()), 0;
-
-
-    // Rest of the rows: one per constraint. 
-    // Have the form [0, LHS, RHS] where RHS is a constant and LHS
+    // One row per constraint.
+    // Have the form [LHS, 0, RHS] where RHS is a constant and LHS
     // is the coefficients of the relevant variables. 
     // Here we need to use the ordering of variables in the set to keep track.
     int rows = 1 + standardisedConstraints.size();
-    int cols = row0.size();
+    int cols = variables.size() + 2; // one for b, one for the bottom-most 1 for goal
     simplexTableau.resize(rows, cols);
-
-    simplexTableau.row(0) = row0;
 
     // Iterate over all the constraints and put them into the matrix.
     for (int i = 0; i < standardisedConstraints.size(); i++) {
-        Eigen::VectorXd currConstraintCoeffs(variables.size());
+        Eigen::RowVectorXd currConstraintCoeffs(variables.size());
 
         auto currTuple = standardisedConstraints[i];
         double currRHS = std::get<2>(currTuple);
@@ -359,20 +396,28 @@ void LPsolver::createSimplexTableau() {
         for (int j = 0; j < currLHS.size(); j++) {
             double coeff = std::get<0>(currLHS[j]);
             std::string var = std::get<1>(currLHS[j]);
-            int varRepresentative;
+            int varIdx;
 
             // Get the column index that represents this var.
-            // Add one because the 0th column is a 0.
+            // Add 1 because the 0th column is a 0.
             for (int k = 0; k < variables.size(); k++) {
-                if (variables[i] == var) {
-                    varRepresentative = k + 1;
+                if (variables[k] == var) {
+                    varIdx = k;
                     break;
                 }
             }
-
-            currConstraintCoeffs(varRepresentative) = coeff;
+            currConstraintCoeffs(varIdx) = coeff;
         }
-
-        simplexTableau.row(i + 1) << 0, currConstraintCoeffs, currRHS;
+        simplexTableau.row(i) << currConstraintCoeffs, 0, currRHS;
     }
+
+    // Goal row, at the bottom
+    // TODO check the ordering
+    Eigen::RowVectorXd goalVec(variables.size());
+    for (int i = 0; i < parsedGoal.size(); i++) {
+        goalVec(i) = parsedGoal[i].first;
+    }
+    simplexTableau.row(standardisedConstraints.size()) << -goalVec, 1, 0;
+
+    std::cout << "Simplex tableu:\n" << simplexTableau << std::endl;
 }
