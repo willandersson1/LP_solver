@@ -6,30 +6,53 @@
 #include <string>
 #include <Eigen/Dense>
 
+// Term
+typedef struct Term {
+    double coeff; 
+    std::string var;
+} Term;
+
+inline std::ostream &operator<<(std::ostream &os, Term const &m) {
+    return os << m.coeff << m.var;
+}
+
+
+// Goal
+typedef std::vector<Term> Goal;
+
+inline std::ostream &operator<<(std::ostream &os, Goal const &m) {
+    for (int i = 0; i < m.size() - 1; i++) {
+        os << m[i] << " + ";
+    }
+    os << m[m.size() - 1];
+    return os;
+}
+
+
+// Constraint
+typedef struct Constraint {
+    std::vector<Term> LHS;
+    std::string comparator;
+    double RHS;
+} Constraint;
+
+inline std::ostream &operator<<(std::ostream &os, Constraint const &m) {
+    for (int i = 0; i < m.LHS.size() - 1; i++) {
+        os << m.LHS[i] << " + ";
+    }
+    os << m.LHS[m.LHS.size() - 1] << " " << m.comparator << " " << m.RHS;
+    return os;
+}
+
+
 class LPsolver {
     std::string inputGoal;
     std::vector<std::string> inputConstraints;
 
-    std::vector<std::pair<int, std::string>> parsedGoal;
-    std::vector
-    <
-        std::tuple
-            <
-            std::vector<std::pair<int, std::string>>, // LHS
-            int // RHS
-            >
-    > parsedConstraints;
+    Goal parsedGoal;
+    std::vector<Constraint> parsedConstraints;
 
-    std::vector
-    <
-        std::tuple
-            <
-            std::vector<std::pair<double, std::string>>, // LHS
-            std::string, // comparator
-            // TODO don't actually need comparator since it is all standardised to =
-            double // RHS. Need doubles as might need to divide in step 1.
-            >
-    > standardisedConstraints;
+    std::vector<Constraint> standardisedConstraints;
 
     std::set<std::string> variables;
 

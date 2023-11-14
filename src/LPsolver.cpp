@@ -4,6 +4,8 @@
 
 // Implementation of the simplex algorithm: 
 // https://en.wikipedia.org/wiki/Simplex_algorithm
+// https://math.libretexts.org/Bookshelves/Applied_Mathematics/Applied_Finite_Mathematics_(Sekhon_and_Bloom)/04%3A_Linear_Programming_The_Simplex_Method/4.02%3A_Maximization_By_The_Simplex_Method
+// https://www.math.wsu.edu/students/odykhovychnyi/M201-04/Ch06_1-2_Simplex_Method.pdf 
 
 // Initialise
 LPsolver::LPsolver(std::string goal_in,
@@ -74,7 +76,7 @@ std::vector<std::string> LPsolver::solve() {
     }
 
     std::cout << "final\n" << simplexTableau << std::endl;
-    
+
     std::vector<std::string> v = {"solver"};
     return v;
 }
@@ -100,7 +102,7 @@ void LPsolver::parseInputGoal() {
         // TODO: factor this part, I use the same code for constraints
         std::string::size_type coeffLength; // stoi will write the length of the number here
         int coeff = std::stoi(inputGoal.substr(i), &coeffLength, 10); // grabs the first integer in the remaining part of the string
-        
+
         // Begin reading the variable to which the coefficient is attached
         // First skip over the number
         i += coeffLength;
@@ -118,9 +120,10 @@ void LPsolver::parseInputGoal() {
         }
 
         // Finally save the parsed info
-        auto term = std::make_pair(coeff, var);
-        parsedGoal.push_back(term);
+        Term term_new = {coeff, var};
+        parsedGoal.push_back(term_new);
     }
+    std::cout << "Parsed goal:\n" << parsedGoal << std::endl;
 }
 
 void LPsolver::parseInputConstraints() {
@@ -129,8 +132,9 @@ void LPsolver::parseInputConstraints() {
     // the following tuple is returned: ({(5, "x"), (-11, "y"), (1, "z")}, "5").
     for (std::string currConstraint : inputConstraints) {
         std::cout << "curr cstr " << currConstraint << std::endl;
-        std::vector<std::pair<int, std::string>> LHS;
-        int RHS = 0;
+        assert(currConstraint.find(">") == std::string::npos);
+
+        Constraint parsedCstr;
 
         int j = 0;
         while (j < currConstraint.length()) {
@@ -146,7 +150,8 @@ void LPsolver::parseInputConstraints() {
                 assert(currConstraint[j + 1] == '=');
                 j += 2;
 
-                RHS = std::stoi(currConstraint.substr(j), nullptr, 10); // grabs the first integer in the remaining part of the string
+                parsedCstr.comparator = "<=";
+                parsedCstr.RHS = std::stoi(currConstraint.substr(j), nullptr, 10); // grabs the first integer in the remaining part of the string
                 break;
             }
 
@@ -174,14 +179,16 @@ void LPsolver::parseInputConstraints() {
                 }
 
                 // Finally save the parsed info
-                auto term = std::make_pair(coeff, var);
                 std::cout << "term: " << coeff << ", " << var << std::endl;
-                LHS.push_back(term);
+                Term term = {coeff, var};
+                parsedCstr.LHS.push_back(term);
             }
         }
-
-        auto parsed = std::make_tuple(LHS, RHS);
-        parsedConstraints.push_back(parsed);
+        parsedConstraints.push_back(parsedCstr);
+    }
+    std::cout << "Parsed constraints:" << std::endl;
+    for (Constraint c : parsedConstraints) {
+        std::cout << c << std::endl;
     }
 }
 
@@ -216,25 +223,25 @@ void LPsolver::step1() {
     std::vector<std::tuple<std::string, std::string, double>> freshExpressions;
 
     // Iterate over all constraints and find those which only involve one variable
-    for (int i = 0; i < parsedConstraints.size(); i++) {
-        auto currTuple = parsedConstraints[i]; 
-        auto currLHS = std::get<0>(currTuple);
-        auto currComparator = "<="; // TODO: make string
-        auto currRHS = std::get<1>(currTuple);
+    for (int i = 0; i < parsedConstraints.size(); i++) { // TODO turn into for cstr : parsedC..
+        Constraint currCstr = parsedConstraints[i]; 
+        std::vector<Term> currLHS = currCstr.LHS;
+        std::string currComparator = currCstr.comparator;
+        double currRHS = currCstr.RHS;
 
         // Check if it involves only one variable, since
         // after parsing, all non-NUM variables are in the LHS
         // Also make sure it's a lower bound
         // TODO: what is this for
         if (currLHS.size() == 1 && currComparator == ">=") {
-            double oldCoeff = currLHS[0].first;
-            std::string oldVar = currLHS[0].second;
+            double oldCoeff = currLHS[0].coeff;
+            std::string oldVar = currLHS[0].var;
 
             // Introduce a new variable
             // Move RHS to LRS (so looks like ... >= 0),
             // also turn coefficient of newVar into 1.
             std::string newVar = oldVar.append("_fresh");
-            double constTerm = -1 * (currRHS/oldCoeff);
+            double constTerm = -1 * (currRHS / oldCoeff);
 
             // Mark it for substitution
             freshExpressions.push_back(std::make_tuple(oldVar, newVar, constTerm));
@@ -244,16 +251,13 @@ void LPsolver::step1() {
         }
 
         // It doesn't involve one variable, so we don't manipulate it
-        // Need to cast ints to doubles explicitly
         else {
-            std::vector<std::pair<double, std::string>> newLHS;
-            for (int j = 0; j < currLHS.size(); j++) {
-                newLHS.push_back(std::make_pair((double) currLHS[j].first, currLHS[j].second));
+            std::vector<Term> newLHS;
+            for (int j = 0; j < currLHS.size(); j++) { // TODO convert into Term : currLHS
+                newLHS.push_back({currLHS[j].coeff, currLHS[j].var});
             }
 
-            double newRHS = (double) currRHS;
-
-            standardisedConstraints.push_back(std::make_tuple(newLHS, currComparator, newRHS));
+            standardisedConstraints.push_back({newLHS, currComparator, currRHS});
         }
     }
     
@@ -261,15 +265,15 @@ void LPsolver::step1() {
     // Iterate over all constraints without single variables
     for (int i = 0; i < standardisedConstraints.size(); i++) {
         // TODO: test if need pointers here actually. [] and get should give references
-        auto currTuple = standardisedConstraints[i]; 
-        auto currLHS = std::get<0>(currTuple); 
-        double* currRHS = &std::get<2>(currTuple);
+        Constraint currCstr = standardisedConstraints[i]; 
+        std::vector<Term> currLHS = currCstr.LHS;
+        double* currRHS = &currCstr.RHS; // TODO why do I really need a pointer here
 
         // Check all pairs in the LHS to see if any need substitution
         // Iterate over all coeff/variable pairs in the LHS
-        for (int j = 0 ; j < currLHS.size(); j++) {
-            double currCoeff = currLHS[j].first;
-            std::string* currVar = &currLHS[j].second; // TODO: also this pointer
+        for (int j = 0 ; j < currLHS.size(); j++) { // TODO turn into for Term : currL..
+            double currCoeff = currLHS[j].coeff;
+            std::string* currVar = &currLHS[j].var; // TODO: also why need this pointer
             
             // Look for matches in all variables that should be substituted
             for (int k = 0; k < freshExpressions.size(); k++) {
@@ -302,9 +306,9 @@ void LPsolver::step2() {
     int nextSlackVarIndex = 0;
     for (int i = 0; i < standardisedConstraints.size(); i++) {
         // TODO: check why the pointers are so weird here
-        auto currTuple = standardisedConstraints[i];
-        auto currLHS = std::get<0>(currTuple);
-        auto currComparator = std::get<1>(currTuple);
+        Constraint currCstr = standardisedConstraints[i];
+        std::vector<Term> currLHS = currCstr.LHS;
+        std::string currComparator = currCstr.comparator;
 
         // Update all non-equality constraints
         if (currComparator != "=") {
@@ -320,9 +324,8 @@ void LPsolver::step2() {
 
             // Update LHS, change comparator to = since we've added slack
             auto slackVar = std::make_pair(coeff, slackName);
-            std::get<0>(standardisedConstraints[i]).push_back(slackVar);
-
-            std::get<1>(standardisedConstraints[i]) = "=";
+            standardisedConstraints[i].LHS.push_back({(double) coeff, slackName});
+            standardisedConstraints[i].comparator = "=";
         }
     }
 }
@@ -350,21 +353,21 @@ void LPsolver::createSimplexTableau() {
 
     // Collect all variables except the artificial "NUM" ones.
     // This also gives us an order to the variables, so we can refer to them.
-    std::vector<std::string> variables;
+    std::vector<std::string> variables; // TODO not a set? to do with order?
 
     // Take the ones from the goal first. By assumption these have no "NUM" vars.
     for (int i = 0; i < parsedGoal.size(); i++) {
-        std::string currVar = parsedGoal[i].second;
+        std::string currVar = parsedGoal[i].var;
         variables.push_back(currVar);
     }
 
     // Take the rest from the constraints.
-    for (int i = 0; i < standardisedConstraints.size(); i++) {
-        auto currTuple = standardisedConstraints[i];
-        auto currLHS = std::get<0>(currTuple);
+    for (int i = 0; i < standardisedConstraints.size(); i++) { // TODO do for cstr : st ..
+        Constraint currCstr = standardisedConstraints[i];
+        std::vector<Term> currLHS = currCstr.LHS;
 
-        for (int j = 0; j < currLHS.size(); j++) {
-            std::string currVar = currLHS[j].second;
+        for (int j = 0; j < currLHS.size(); j++) { // TODO do for .. : ..
+            std::string currVar = currLHS[j].var;
 
             // Avoid "NUM" and duplicates.
             if (currVar != "NUM" && 
@@ -388,14 +391,14 @@ void LPsolver::createSimplexTableau() {
     for (int i = 0; i < standardisedConstraints.size(); i++) {
         Eigen::RowVectorXd currConstraintCoeffs(variables.size());
 
-        auto currTuple = standardisedConstraints[i];
-        double currRHS = std::get<2>(currTuple);
-        auto currLHS = std::get<0>(currTuple);
+        Constraint currCstr = standardisedConstraints[i];
+        double currRHS = currCstr.RHS;
+        std::vector<Term> currLHS = currCstr.LHS;
 
         // Go through the LHS of this constraint to get the coefficients.
         for (int j = 0; j < currLHS.size(); j++) {
-            double coeff = std::get<0>(currLHS[j]);
-            std::string var = std::get<1>(currLHS[j]);
+            double coeff = currLHS[j].coeff;
+            std::string var = currLHS[j].var;
             int varIdx;
 
             // Get the column index that represents this var.
@@ -414,8 +417,8 @@ void LPsolver::createSimplexTableau() {
     // Goal row, at the bottom
     // TODO check the ordering
     Eigen::RowVectorXd goalVec(variables.size());
-    for (int i = 0; i < parsedGoal.size(); i++) {
-        goalVec(i) = parsedGoal[i].first;
+    for (int i = 0; i < parsedGoal.size(); i++) { // do for .. : ..
+        goalVec(i) = parsedGoal[i].coeff;
     }
     simplexTableau.row(standardisedConstraints.size()) << -goalVec, 1, 0;
 
