@@ -16,9 +16,8 @@ string get_goal() {
     cout << "An example: 4x + -5y + 1z." << endl;
 
     string input_str;
-    input_str = "1x"; // TODO undo
-    // cin.ignore();
-    // getline(cin, input_str);
+    cin.ignore();
+    getline(cin, input_str);
 
     return input_str;
 }
@@ -26,26 +25,24 @@ string get_goal() {
 vector<string> get_constraints() {
     cout << "How many constraints do you have?" << endl;
     int num_constraints;
-    // num_constraints = 2; // TODO undo
-    // cin >> num_constraints;
+    cin >> num_constraints;
 
     cout << "Enter the " << num_constraints << " constraints." << endl;
     cout << "Follow the rules for the maximisation goal, additionally..." << endl;
     cout << "Comparators only <=; only constants in the RHS; no constants in the LHS." << endl;
-    cout << "Don't enter two constraints where one is a subset of the other, e.g. 5x <= 10 and 5x <= 5." << endl;
     cout << "A valid example: 9x + -8y <= 100" << endl;
 
-    vector<string> constraints = {"2x <= 50"};
-    // for (int i = 0; i < num_constraints; i++) { // TODO undo
-    //     string constraint; 
-    //     // cin.ignore();
-    //     // getline(cin, constraint);
+    vector<string> constraints;
+    for (int i = 0; i < num_constraints; i++) { // TODO undo
+        string constraint; 
+        cin.ignore();
+        getline(cin, constraint);
 
-    //     assert(constraint.find(" <= ") != string::npos);
-    //     assert(constraint.find(">") == string::npos);
+        assert(constraint.find(" <= ") != string::npos);
+        assert(constraint.find(">") == string::npos);
 
-    //     constraints.push_back(constraint);
-    // }
+        constraints.push_back(constraint);
+    }
 
     return constraints;
 }
@@ -67,15 +64,23 @@ void solveGeneralLP() {
     // Shouldn't have uncollected variables like 2x + x <= 10. 
     // This includes constants.
 
-    string goal_str = get_goal();
-    goal_str = "1x"; // TODO undo
-    vector<string> constraints = get_constraints();
+    // TODO undo
+    string goal_str = "9x + 2y + 4z";
+    vector<string> constraints = {
+        "1x + 1y <= 9", 
+        "3x + 1y <= 18",
+        "1x <= 7", 
+        "1y <= 6", 
+        "1z <= 11",
+        "1x + 1y + 1z <= 10", 
+        "1y + 2z <= 22"
+        };
+    // string goal_str = get_goal();
+    // vector<string> constraints = get_constraints();
 
     LPsolver solver = LPsolver(goal_str, constraints);
-    vector<string> result = solver.solve();
-
-    // Print result
-    // TODO
+    string result = solver.solve();
+    cout << result << endl;
 }
 
 

@@ -48,10 +48,10 @@ int getPivotCol(Eigen::MatrixXd* simplexTableau) {
     int cols = simplexTableau -> cols();
 
     int pivotCol = 0;
-    double pivotColVal = (*simplexTableau)(rows - 1, 0);
+    double pivotColVal = (*simplexTableau)(rows - 1, pivotCol);
     for (int c = 1; c < cols - 2; c++) { // subtract 2 because we skip the P value and the b column
         double elem = (*simplexTableau)(rows - 1, c);
-        if (elem < pivotCol) {
+        if (elem < pivotColVal) {
             pivotCol = c;
             pivotColVal = elem;
         }
@@ -64,8 +64,6 @@ int getPivotRow(Eigen::MatrixXd* simplexTableau, int pivotCol) {
     int rows = simplexTableau -> rows();
     int cols = simplexTableau -> cols();
 
-    Eigen::VectorXd quotients(rows - 1);
-    quotients.setZero();
     std::vector<int> positivePivotColIdxs;
     for (int r = 0; r < rows - 1; r++) {
         if ((*simplexTableau)(r, pivotCol) > 0) {
@@ -76,7 +74,7 @@ int getPivotRow(Eigen::MatrixXd* simplexTableau, int pivotCol) {
     int pivotRow = -1;
     double smallestQuotient;
     for (int r : positivePivotColIdxs) {
-        double quotient = (*simplexTableau)(r, cols - 1) / (*simplexTableau)(r, cols - 1);
+        double quotient = (*simplexTableau)(r, cols - 1) / (*simplexTableau)(r, pivotCol);
         if (pivotRow == -1 || quotient < smallestQuotient) {
             pivotRow = r;
             smallestQuotient = quotient;
@@ -86,14 +84,13 @@ int getPivotRow(Eigen::MatrixXd* simplexTableau, int pivotCol) {
     return pivotRow;
 }
 
-std::vector<std::string> LPsolver::solve() {
+std::string LPsolver::solve() {
     const int rows = simplexTableau.rows();
     const int cols = simplexTableau.cols();
 
     while (simplexTableau.row(rows - 1).minCoeff() < 0) {
         int pivotCol = getPivotCol(&simplexTableau);
         int pivotRow = getPivotRow(&simplexTableau, pivotCol);
-
         double pivotElem = simplexTableau(pivotRow, pivotCol);
         
         // Apparently these always hold
@@ -118,8 +115,28 @@ std::vector<std::string> LPsolver::solve() {
 
     std::cout << "final\n" << simplexTableau << std::endl;
 
-    std::vector<std::string> v = {"solver"};
-    return v;
+    std::string output = "Results:\n";
+    // Ignore slack/extra variables
+    for (int i = 0; i < parsedGoal.size(); i++) {
+        int numPos = 0;
+        int lastPos_idx = -1;
+        for (int r = 0; r < rows; r++) {
+            if (simplexTableau(r, i) > 0) {
+                lastPos_idx = r;
+                numPos++;
+            }
+        }
+
+        assert(numPos > 0);
+        // TODO why is this messed up when I have a negative coeff in the goal? I think bc 
+        // there's a negative number (from the positive coeff) so it does that, then it's just a positive 
+        // number (from the negative coeff) left. With "999x + -1y", {"5x + -1y <= 9", "1x <= 2"}
+        // it's fine, but with "5x + -2y" it's not.
+        double varCoeff = numPos == 1 ? simplexTableau(lastPos_idx, cols - 1) : 0;
+        output += variables[i] + ": " + std::to_string(varCoeff) + "\n";
+    }
+    output += "Optimal value: " + std::to_string(simplexTableau(rows - 1, cols - 1));
+    return output;
 }
 
 void LPsolver::parse() {
@@ -141,12 +158,10 @@ void LPsolver::parseInputGoal() {
         Term term = getTermFromSubstring(inputGoal, &i);
         parsedGoal.push_back(term);
     }
-    std::cout << "Parsed goal:\n" << parsedGoal << std::endl;
 }
 
 void LPsolver::parseInputConstraints() {
     for (const std::string& currConstraint : inputConstraints) {
-        std::cout << "curr cstr " << currConstraint << std::endl;
         assert(currConstraint.find(">") == std::string::npos); // don't allow >= for now
 
         Constraint parsedCstr;
@@ -177,10 +192,6 @@ void LPsolver::parseInputConstraints() {
             }
         }
         parsedConstraints.push_back(parsedCstr);
-    }
-    std::cout << "Parsed constraints:" << std::endl;
-    for (Constraint c : parsedConstraints) {
-        std::cout << c << std::endl;
     }
 }
 
@@ -251,7 +262,6 @@ void LPsolver::step1() {
     // Iterate over all constraints without single variables
     // TODO I think I'm messed up with the pointers etc here
     for (Constraint& currCstr : standardisedConstraints) {
-        std::cout << "before cstr: " << currCstr << std::endl;
         // Check all pairs in the LHS to see if any need substitution
         // Iterate over all coeff/variable pairs in the LHS
         // for (int j = 0 ; j < currLHS.size(); j++) { // TODO turn into for Term : currL..
@@ -271,7 +281,6 @@ void LPsolver::step1() {
                 }
             }
         }
-    std::cout << "after cstr: " << currCstr << "\n" << std::endl;
     }
 }
 
@@ -294,11 +303,11 @@ void LPsolver::step2() {
                 coeff = -1;
             }
 
-            std::string slackName = "s_" + nextSlackVarIndex;
+            std::string slackName = "s_" + std::to_string(nextSlackVarIndex);
+            for (std::string s : variables) assert(slackName != s); // make sure not already a variable
             nextSlackVarIndex++;
 
             // Update LHS, change comparator to = since we've added slack
-            auto slackVar = std::make_pair(coeff, slackName);
             currCstr.LHS.push_back({(double) coeff, slackName});
             currCstr.comparator = "=";
         }
@@ -321,13 +330,8 @@ void LPsolver::makeAllRHSPositive() {
 }
 
 void LPsolver::createSimplexTableau() {
-    // Collect all variables except the artificial "NUM" ones.
-    // This also gives us an order to the variables, so we can refer to them.
-    std::vector<std::string> variables;
-
     for (Term term : parsedGoal) {
-        std::string currVar = term.var;
-        variables.push_back(currVar);
+        variables.push_back(term.var);
     }
 
     // Take the rest from the constraints.

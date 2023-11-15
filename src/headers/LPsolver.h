@@ -54,7 +54,7 @@ class LPsolver {
 
     std::vector<Constraint> standardisedConstraints;
 
-    std::set<std::string> variables;
+    std::vector<std::string> variables;
 
     Eigen::MatrixXd simplexTableau;
 
@@ -72,5 +72,5 @@ class LPsolver {
     public:
         LPsolver (std::string, std::vector<std::string>);
 
-        std::vector<std::string> solve();
+        std::string solve();
 };
