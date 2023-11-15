@@ -16,7 +16,7 @@ string get_goal() {
     cout << "An example: 4x + -5y + 1z." << endl;
 
     string input_str;
-    input_str = "2x"; // TODO undo
+    input_str = "1x"; // TODO undo
     // cin.ignore();
     // getline(cin, input_str);
 
@@ -26,26 +26,26 @@ string get_goal() {
 vector<string> get_constraints() {
     cout << "How many constraints do you have?" << endl;
     int num_constraints;
-    num_constraints = 1; // TODO undo
+    // num_constraints = 2; // TODO undo
     // cin >> num_constraints;
 
     cout << "Enter the " << num_constraints << " constraints." << endl;
     cout << "Follow the rules for the maximisation goal, additionally..." << endl;
     cout << "Comparators only <=; only constants in the RHS; no constants in the LHS." << endl;
-    cout << "An example: 9x + -8y <= 100" << endl;
+    cout << "Don't enter two constraints where one is a subset of the other, e.g. 5x <= 10 and 5x <= 5." << endl;
+    cout << "A valid example: 9x + -8y <= 100" << endl;
 
-    vector<string> constraints; 
-    for (int i = 0; i < num_constraints; i++) {
-        string constraint; 
-        constraint = "5x <= 500"; // TODO undo
-        // cin.ignore();
-        // getline(cin, constraint);
+    vector<string> constraints = {"2x <= 50"};
+    // for (int i = 0; i < num_constraints; i++) { // TODO undo
+    //     string constraint; 
+    //     // cin.ignore();
+    //     // getline(cin, constraint);
 
-        assert(constraint.find(" <= ") != string::npos);
-        assert(constraint.find(">") == string::npos);
+    //     assert(constraint.find(" <= ") != string::npos);
+    //     assert(constraint.find(">") == string::npos);
 
-        constraints.push_back(constraint);
-    }
+    //     constraints.push_back(constraint);
+    // }
 
     return constraints;
 }

@@ -43,50 +43,66 @@ LPsolver::LPsolver(std::string goal_in,
     createSimplexTableau();
 }
 
+int getPivotCol(Eigen::MatrixXd* simplexTableau) {
+    int rows = simplexTableau -> rows();
+    int cols = simplexTableau -> cols();
+
+    int pivotCol = 0;
+    double pivotColVal = (*simplexTableau)(rows - 1, 0);
+    for (int c = 1; c < cols - 2; c++) { // subtract 2 because we skip the P value and the b column
+        double elem = (*simplexTableau)(rows - 1, c);
+        if (elem < pivotCol) {
+            pivotCol = c;
+            pivotColVal = elem;
+        }
+    }
+
+    return pivotCol;
+}
+
+int getPivotRow(Eigen::MatrixXd* simplexTableau, int pivotCol) {
+    int rows = simplexTableau -> rows();
+    int cols = simplexTableau -> cols();
+
+    Eigen::VectorXd quotients(rows - 1);
+    quotients.setZero();
+    std::vector<int> positivePivotColIdxs;
+    for (int r = 0; r < rows - 1; r++) {
+        if ((*simplexTableau)(r, pivotCol) > 0) {
+            positivePivotColIdxs.push_back(r);
+        }
+    }
+
+    int pivotRow = -1;
+    double smallestQuotient;
+    for (int r : positivePivotColIdxs) {
+        double quotient = (*simplexTableau)(r, cols - 1) / (*simplexTableau)(r, cols - 1);
+        if (pivotRow == -1 || quotient < smallestQuotient) {
+            pivotRow = r;
+            smallestQuotient = quotient;
+        }
+    }
+
+    return pivotRow;
+}
+
 std::vector<std::string> LPsolver::solve() {
     const int rows = simplexTableau.rows();
     const int cols = simplexTableau.cols();
 
     while (simplexTableau.row(rows - 1).minCoeff() < 0) {
-        // Get pivot col
-        int pivotCol = 0;
-        double pivotColVal = simplexTableau(rows - 1, 0);
-        for (int c = 1; c < cols - 2; c++) { // subtract 2 because we skip the P value and the b column
-            double elem = simplexTableau(rows - 1, c);
-            if (elem < pivotCol) {
-                pivotCol = c;
-                pivotColVal = elem;
-            }
-        }
-
-        // Get pivot row
-        Eigen::VectorXd quotients(rows - 1);
-        quotients.setZero();
-        std::vector<int> positivePivotColIdxs;
-        for (int r = 0; r < rows - 1; r++) {
-            if (simplexTableau(r, pivotCol) > 0) {
-                positivePivotColIdxs.push_back(r);
-            }
-        }
-
-        int pivotRow = -1;
-        double smallestQuotient;
-        for (int r : positivePivotColIdxs) {
-            double quotient = simplexTableau(r, cols - 1) / simplexTableau(r, cols - 1);
-            if (pivotRow == -1 || quotient < smallestQuotient) {
-                pivotRow = r;
-                smallestQuotient = quotient;
-            }
-        }
+        int pivotCol = getPivotCol(&simplexTableau);
+        int pivotRow = getPivotRow(&simplexTableau, pivotCol);
 
         double pivotElem = simplexTableau(pivotRow, pivotCol);
+        
+        // Apparently these always hold
         assert(pivotRow < rows - 1);
         assert(pivotElem > 0);
 
         // Pivot
         // Make pivot = 1
         simplexTableau.row(pivotRow) /= pivotElem;
-        std::cout << "after dividing by pivot elem\n" << simplexTableau << std::endl;
 
         // Make all other entries in pivot col = 0
         for (int r = 0; r < rows; r++) {
@@ -147,10 +163,10 @@ void LPsolver::parseInputConstraints() {
             // Check if we're at a comparator
             else if (curr == '<') {
                 assert(currConstraint[j + 1] == '=');
-                j += 2;
-
                 parsedCstr.comparator = "<=";
+                j += 2;
                 parsedCstr.RHS = std::stoi(currConstraint.substr(j), nullptr, 10);
+
                 break;
             }
 
@@ -305,24 +321,16 @@ void LPsolver::makeAllRHSPositive() {
 }
 
 void LPsolver::createSimplexTableau() {
-    // Because the program has been standardised, we know that we can
-    // create a simplex tableau in canonical form. 
-    // See https://en.wikipedia.org/wiki/Simplex_algorithm#Simplex_tableau
-    // The linear algebra library Eigen is used.
-
     // Collect all variables except the artificial "NUM" ones.
     // This also gives us an order to the variables, so we can refer to them.
-    std::vector<std::string> variables; // TODO not a set? to do with order?
+    std::vector<std::string> variables;
 
-    // Take the ones from the goal first. By assumption these have no "NUM" vars.
     for (Term term : parsedGoal) {
         std::string currVar = term.var;
         variables.push_back(currVar);
     }
 
     // Take the rest from the constraints.
-    // for (int i = 0; i < standardisedConstraints.size(); i++) { // TODO do for cstr : st ..
-    //     Constraint currCstr = standardisedConstraints[i];
     for (const Constraint& currCstr : standardisedConstraints) {
         for (const Term& term : currCstr.LHS) {
             std::string currVar = term.var;
@@ -348,6 +356,7 @@ void LPsolver::createSimplexTableau() {
     // Iterate over all the constraints and put them into the matrix.
     for (int i = 0; i < standardisedConstraints.size(); i++) {
         Eigen::RowVectorXd currConstraintCoeffs(variables.size());
+        currConstraintCoeffs.setZero();
 
         const Constraint currCstr = standardisedConstraints[i];
         double currRHS = currCstr.RHS;
@@ -372,12 +381,12 @@ void LPsolver::createSimplexTableau() {
     }
 
     // Goal row, at the bottom
-    // TODO check the ordering
     Eigen::RowVectorXd goalVec(variables.size());
-    for (int i = 0; i < parsedGoal.size(); i++) { // do for .. : ..
+    goalVec.setZero();
+    for (int i = 0; i < parsedGoal.size(); i++) {
         goalVec(i) = parsedGoal[i].coeff;
     }
-    simplexTableau.row(standardisedConstraints.size()) << -goalVec, 1, 0;
+    simplexTableau.row(rows - 1) << -goalVec, 1, 0;
     
     std::cout << "Simplex tableu:\n" << simplexTableau << std::endl;
 }

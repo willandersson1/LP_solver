@@ -56,10 +56,7 @@ class LPsolver {
 
     std::set<std::string> variables;
 
-    Eigen::MatrixXd A;
-    Eigen::VectorXd b;
-    Eigen::VectorXd c;
-    Eigen::MatrixXd simplexTableau; // TODO do I really need A, b, c? 
+    Eigen::MatrixXd simplexTableau;
 
     void parse();
     void standardise();
