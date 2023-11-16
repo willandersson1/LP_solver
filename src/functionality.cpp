@@ -29,17 +29,17 @@ vector<string> get_constraints() {
 
     cout << "Enter the " << num_constraints << " constraints." << endl;
     cout << "Follow the rules for the maximisation goal, additionally..." << endl;
-    cout << "Comparators only <=; only constants in the RHS; no constants in the LHS." << endl;
+    cout << "Comparators only <= or >=; only constants in the RHS; no constants in the LHS." << endl;
+    cout << "No negative numbers in the RHS. Multiply by -1 if necessary." << endl;
     cout << "A valid example: 9x + -8y <= 100" << endl;
 
     vector<string> constraints;
-    for (int i = 0; i < num_constraints; i++) { // TODO undo
+    for (int i = 0; i < num_constraints; i++) {
         string constraint; 
         cin.ignore();
         getline(cin, constraint);
 
-        assert(constraint.find(" <= ") != string::npos);
-        assert(constraint.find(">") == string::npos);
+        assert(constraint.find(" <= ") != string::npos || constraint.find(" >= ") != string::npos);
 
         constraints.push_back(constraint);
     }
@@ -58,10 +58,9 @@ void solveGeneralLP() {
     // No 0 coefficients
     // No unrestricted variables
 
-    // Comparators only <=
-    // Must have + between terms everywhere. Turn x - y <= 0 into x + -y <= 0.
+    // Must have + between terms everywhere. Turn 1x - 1y <= 0 into 1x + -1y <= 0.
     // Only integers
-    // Shouldn't have uncollected variables like 2x + x <= 10. 
+    // Shouldn't have uncollected variables like 2x + 1x <= 10. 
     // This includes constants.
 
     // TODO undo
@@ -73,14 +72,17 @@ void solveGeneralLP() {
         "1y <= 6", 
         "1z <= 11",
         "1x + 1y + 1z <= 10", 
-        "1y + 2z <= 22"
+        "1y + 2z <= 22",
+        "1y >= 1",
+        "1z >= 5",
         };
     // string goal_str = get_goal();
     // vector<string> constraints = get_constraints();
 
     LPsolver solver = LPsolver(goal_str, constraints);
-    string result = solver.solve();
-    cout << result << endl;
+    solver.solve();
+    string results = solver.getResults();
+    cout << results << endl;
 }
 
 

@@ -39,7 +39,6 @@ LPsolver::LPsolver(std::string goal_in,
     inputConstraints = constraints_in;
 
     parse();
-    standardise();
     createSimplexTableau();
 }
 
@@ -49,7 +48,7 @@ int getPivotCol(Eigen::MatrixXd* simplexTableau) {
 
     int pivotCol = 0;
     double pivotColVal = (*simplexTableau)(rows - 1, pivotCol);
-    for (int c = 1; c < cols - 2; c++) { // subtract 2 because we skip the P value and the b column
+    for (int c = 1; c < cols - 2; c++) { // subtract 2 because we skip the b and goal columns
         double elem = (*simplexTableau)(rows - 1, c);
         if (elem < pivotColVal) {
             pivotCol = c;
@@ -84,7 +83,36 @@ int getPivotRow(Eigen::MatrixXd* simplexTableau, int pivotCol) {
     return pivotRow;
 }
 
-std::string LPsolver::solve() {
+std::string LPsolver::getResults() {
+    const int rows = simplexTableau.rows();
+    const int cols = simplexTableau.cols();
+
+    std::string output = "Results:\n";
+    // Ignore slack/extra variables
+    for (int i = 0; i < parsedGoal.size(); i++) {
+        int numPos = 0;
+        int lastPos_idx = -1;
+        for (int r = 0; r < rows; r++) {
+            if (simplexTableau(r, i) > 0) {
+                lastPos_idx = r;
+                numPos++;
+            }
+        }
+
+        assert(numPos > 0);
+        // TODO why is this messed up when I have a negative coeff in the goal? I think bc 
+        // there's a negative number (from the positive coeff) so it does that, then it's just a positive 
+        // number (from the negative coeff) left. With "999x + -1y", {"5x + -1y <= 9", "1x <= 2"}
+        // it's fine, but with "5x + -2y" it's not.
+        double varCoeff = numPos == 1 ? simplexTableau(lastPos_idx, cols - 1) : 0;
+        output += variables[i] + ": " + std::to_string(varCoeff) + "\n";
+    }
+    output += "Optimal value: " + std::to_string(simplexTableau(rows - 1, cols - 1));
+    
+    return output;
+}
+
+void LPsolver::solve() {
     const int rows = simplexTableau.rows();
     const int cols = simplexTableau.cols();
 
@@ -112,31 +140,7 @@ std::string LPsolver::solve() {
         }
         std::cout << "after pivoting\n" << simplexTableau << std::endl;
     }
-
-    std::cout << "final\n" << simplexTableau << std::endl;
-
-    std::string output = "Results:\n";
-    // Ignore slack/extra variables
-    for (int i = 0; i < parsedGoal.size(); i++) {
-        int numPos = 0;
-        int lastPos_idx = -1;
-        for (int r = 0; r < rows; r++) {
-            if (simplexTableau(r, i) > 0) {
-                lastPos_idx = r;
-                numPos++;
-            }
-        }
-
-        assert(numPos > 0);
-        // TODO why is this messed up when I have a negative coeff in the goal? I think bc 
-        // there's a negative number (from the positive coeff) so it does that, then it's just a positive 
-        // number (from the negative coeff) left. With "999x + -1y", {"5x + -1y <= 9", "1x <= 2"}
-        // it's fine, but with "5x + -2y" it's not.
-        double varCoeff = numPos == 1 ? simplexTableau(lastPos_idx, cols - 1) : 0;
-        output += variables[i] + ": " + std::to_string(varCoeff) + "\n";
-    }
-    output += "Optimal value: " + std::to_string(simplexTableau(rows - 1, cols - 1));
-    return output;
+    std::cout << "Final tableau:\n" << simplexTableau << std::endl;
 }
 
 void LPsolver::parse() {
@@ -162,8 +166,6 @@ void LPsolver::parseInputGoal() {
 
 void LPsolver::parseInputConstraints() {
     for (const std::string& currConstraint : inputConstraints) {
-        assert(currConstraint.find(">") == std::string::npos); // don't allow >= for now
-
         Constraint parsedCstr;
 
         int j = 0;
@@ -176,11 +178,13 @@ void LPsolver::parseInputConstraints() {
             }
 
             // Check if we're at a comparator
-            else if (curr == '<') {
-                assert(currConstraint[j + 1] == '=');
-                parsedCstr.comparator = "<=";
+            else if (curr == '<' || curr == '>') {
+                parsedCstr.comparator += curr; parsedCstr.comparator += currConstraint[j + 1];                
                 j += 2;
                 parsedCstr.RHS = std::stoi(currConstraint.substr(j), nullptr, 10);
+
+                assert(parsedCstr.comparator == "<=" || parsedCstr.comparator == ">=");
+                assert(parsedCstr.RHS >= 0);
 
                 break;
             }
@@ -193,98 +197,10 @@ void LPsolver::parseInputConstraints() {
         }
         parsedConstraints.push_back(parsedCstr);
     }
+    for (auto c : parsedConstraints) std::cout << c << std::endl;
 }
 
-void LPsolver::standardise() {
-    // Put the goal and constraints into standard form.
-
-    // Eliminate constraints of the form ... >= k, k =/= 0 
-    // by substitution with new variables.
-    step1();
-
-    // Now all inequality constraints are just positivity constraints.
-    // Next, change all inequality constraints to equality constraints
-    // using "slack variables".
-    step2();
-
-    // Remove unconstrained variables. These can be trivially solved by 
-    // the solver (set them to any number that satisfies its constraints).
-    // Do this by replacing such constraints with two two-equality constraints.
-    // TODO: unimplemented. Just enforced by input instructions 
-    step3();
-
-    // The final step is to make the RHSs all positive
-    makeAllRHSPositive();
-}
-
-void LPsolver::step1() {
-    // Idea is to convert x >= 7 into a new variable x_fresh := x - 7
-    // Then all instances of x in other constraints can be replaced by 
-    // x_fresh, as long as x_fresh >= 0. But since all variables in linear programs
-    // satisfy this condition, we can just delete the original constraint (x >= 7).
-    // It is not necessary to add another constraint for x_fresh.
-    std::vector<std::tuple<std::string, std::string, double>> freshExpressions;
-
-    // Iterate over all constraints and find those which only involve one variable
-    for (const Constraint& currCstr : parsedConstraints) {
-        std::vector<Term> currLHS = currCstr.LHS;
-        std::string currComparator = currCstr.comparator;
-        double currRHS = currCstr.RHS;
-
-        // Check if it involves only one variable, since
-        // after parsing, all non-NUM variables are in the LHS
-        // Also make sure it's a lower bound
-        // TODO: what is this for
-        if (currLHS.size() == 1 && currComparator == ">=") {
-            double oldCoeff = currLHS[0].coeff;
-            std::string oldVar = currLHS[0].var;
-
-            // Introduce a new variable
-            // Move RHS to LRS (so looks like ... >= 0),
-            // also turn coefficient of newVar into 1.
-            std::string newVar = oldVar.append("_fresh");
-            double constTerm = -1 * (currRHS / oldCoeff);
-
-            // Mark it for substitution
-            freshExpressions.push_back(std::make_tuple(oldVar, newVar, constTerm));
-
-            // Note: by not adding it to the new constraints list, 
-            // it effectively deletes this constraint.
-        }
-
-        // It doesn't involve one variable, so we don't manipulate it
-        else {
-            standardisedConstraints.push_back(currCstr);
-        }
-    }
-    
-    // Now substitute with the newly minted variables
-    // Iterate over all constraints without single variables
-    // TODO I think I'm messed up with the pointers etc here
-    for (Constraint& currCstr : standardisedConstraints) {
-        // Check all pairs in the LHS to see if any need substitution
-        // Iterate over all coeff/variable pairs in the LHS
-        // for (int j = 0 ; j < currLHS.size(); j++) { // TODO turn into for Term : currL..
-        for (Term& currTerm : currCstr.LHS) {            
-            // Look for matches in all variables that should be substituted
-            for (int k = 0; k < freshExpressions.size(); k++) {
-                std::string oldVar = std::get<0>(freshExpressions[k]);
-                std::string newVar = std::get<1>(freshExpressions[k]);
-                double newConst = std::get<2>(freshExpressions[k]);
-
-                // Found match: substitute
-                if (oldVar == currTerm.var) {
-                    currTerm.var = newVar;
-                    // Multiply the const in the expression
-                    // by the current coefficient, then move it to the RHS
-                    currCstr.RHS -= currTerm.coeff * newConst;
-                }
-            }
-        }
-    }
-}
-
-void LPsolver::step2() {
+void LPsolver::addSlackVariables() {
     // Now we want to get rid of all inequality constraints and replace them 
     // with equality constraints. This allows for simpler solving.
     // Introduce "slack variables" that are >= 0 (again, implicitly).
@@ -292,16 +208,12 @@ void LPsolver::step2() {
     // The intuition is that x <= 0 iff there's *some* s >= 0 s.t
     // x + s = 0. It "tightens the slack" to "bring up" x to 0.
     // The same but with bringing it down for >= (ie y >= 0 ~> y - s' = 0)
-
+    // standardisedConstraints = parsedConstraints;
     int nextSlackVarIndex = 0;
-    for (Constraint& currCstr : standardisedConstraints) {
+    for (Constraint& currCstr : parsedConstraints) {
         // Update all non-equality constraints
         if (currCstr.comparator != "=") {
-            int coeff = 1;
-
-            if (currCstr.comparator == ">=") {
-                coeff = -1;
-            }
+            int coeff = currCstr.comparator == "<=" ? 1 : -1;
 
             std::string slackName = "s_" + std::to_string(nextSlackVarIndex);
             for (std::string s : variables) assert(slackName != s); // make sure not already a variable
@@ -312,30 +224,21 @@ void LPsolver::step2() {
             currCstr.comparator = "=";
         }
     }
-}
-
-void LPsolver::step3() {
-    // Final step is to remove unrestricted variables. These are ones
-    // that have no constraint limiting them to a domain
-    // if x is unrestricted, then introduce the expression x_+ - x_- 
-    // with x_+, x_- >= 0. Substituting x by this expression is equivalent
-    // to x being unrestricted.
-    // Since we implicitly assume all variables remaining after standardising 
-    // are >= 0, we don't need to add another constraint and x can be elimintated
-    // from the program.
-}
-
-void LPsolver::makeAllRHSPositive() {
-    // TODO
+    std::cout << "\nFinal constraints" << std::endl;
+    for (auto c : parsedConstraints) std::cout << c << std::endl;
 }
 
 void LPsolver::createSimplexTableau() {
+    // First step, to get a canonical form
+    addSlackVariables();
+
+    // Gather list of all variables
     for (Term term : parsedGoal) {
         variables.push_back(term.var);
     }
 
     // Take the rest from the constraints.
-    for (const Constraint& currCstr : standardisedConstraints) {
+    for (const Constraint& currCstr : parsedConstraints) {
         for (const Term& term : currCstr.LHS) {
             std::string currVar = term.var;
 
@@ -347,22 +250,21 @@ void LPsolver::createSimplexTableau() {
         }
     }
 
-    // Create the simplex tableau.
-
+    // Begin actually making the simplex tableau
     // One row per constraint.
     // Have the form [LHS, 0, RHS] where RHS is a constant and LHS
     // is the coefficients of the relevant variables. 
     // Here we need to use the ordering of variables in the set to keep track.
-    int rows = 1 + standardisedConstraints.size();
+    int rows = 1 + parsedConstraints.size();
     int cols = variables.size() + 2; // one for b, one for the bottom-most 1 for goal
     simplexTableau.resize(rows, cols);
 
     // Iterate over all the constraints and put them into the matrix.
-    for (int i = 0; i < standardisedConstraints.size(); i++) {
+    for (int i = 0; i < parsedConstraints.size(); i++) {
         Eigen::RowVectorXd currConstraintCoeffs(variables.size());
         currConstraintCoeffs.setZero();
 
-        const Constraint currCstr = standardisedConstraints[i];
+        const Constraint currCstr = parsedConstraints[i];
         double currRHS = currCstr.RHS;
 
         // Go through the LHS of this constraint to get the coefficients.

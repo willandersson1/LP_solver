@@ -59,18 +59,14 @@ class LPsolver {
     Eigen::MatrixXd simplexTableau;
 
     void parse();
-    void standardise();
     void createSimplexTableau();
 
     void parseInputGoal();
     void parseInputConstraints();
-    void step1();
-    void step2();
-    void step3();
-    void makeAllRHSPositive();
+    void addSlackVariables();
 
     public:
         LPsolver (std::string, std::vector<std::string>);
-
-        std::string solve();
+        void solve();
+        std::string getResults();
 };
