@@ -1,7 +1,6 @@
 (work in progress)
 
 ### Overview
-// TODO it's actual a maximisation
 This program will solve linear programs by using the simplex algorithm, created by George Dantzig in 1947 (https://en.wikipedia.org/wiki/Simplex_algorithm). A linear program is given by an optimisation goal and a list of linear constraints. For example: 
 
 	Goal: minimise 2x - 3y
